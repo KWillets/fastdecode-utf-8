@@ -35,12 +35,12 @@ void dump(char * xc) {
 int main() {
   decoder_permutation(&shuffleTable[0][0]);
 
-  printf( "static uint8_t shuffleTable[256][16] = {\n");
+  printf( "static uint8_t shuffleTable[256][16] = {\n{");
   
   for(int i=0; i<256;i++) {
     dump((char *) &shuffleTable[i][0]);
-    printf(i < 255 ? ",\n" :"\n};");
-      }
+    printf(i < 255 ? " },\n{" :" }\n};\n");
+  }
   
 }
 
