@@ -29,7 +29,7 @@ __m128i shift( __m128i x, int i ) {
   return _mm_shuffle_epi8(x, _mm_loadu_si128((__m128i *)(ix + i)));
 }
 
-int utf32_code_ptr(void *p, uint32_t **pout) {
+static inline int utf32_code_ptr(void *p, uint32_t **pout) {
   __m128i utf8 = _mm_loadu_si128(p); 
   __m128i upper4 = make_upper4(utf8);
   __m128i lengths = _mm_shuffle_epi8(len, upper4);
@@ -71,18 +71,19 @@ int utf32_code_ptr(void *p, uint32_t **pout) {
   return i;
 }
 
-size_t utf32_decode(uint8_t *txt, int length, uint32_t **pout)
+size_t utf32_decode(uint8_t *txt, size_t length, uint32_t **pout)
 {
   int n = 0;
   uint8_t *p = txt;
-  int l = length;
+  size_t consumed;
+  for(consumed = 0;
+      consumed+16 <= length && ((n = utf32_code_ptr(p+consumed, pout))); 
+      consumed += n)
+    ;
 
-  while((l > 16) && ((n = utf32_code_ptr(p, pout))))
-    {
-      p += n;
-      l -= n;
-    }
-
+  int l = length - consumed;
+  p += consumed;
+  
   while(l > 0) // 1-2 iterations to consume end
     {
       uint8_t inbuf[16];

@@ -34,7 +34,7 @@ void populate(char *data, size_t N) {
 
 void populate3(char *data, size_t N) {
   int i;
-  for (i = 0; i < N; i+=3)
+  for (i = 0; i+3 < N; i+=3)
     memcpy(data+i, "ㄱ", 3);
 
   for(; i < N; i++)
@@ -42,12 +42,13 @@ void populate3(char *data, size_t N) {
 }
 
 
-size_t decode(uint8_t *txt, int length, uint32_t *out)
+size_t decode(char *txt, int length, uint32_t *out)
 {
   uint32_t *ptmp = out;
-  int l = utf32_decode(txt, length, &ptmp);
+  printf("N %d txt %4s\n", length, txt + length -4);
+  int l = utf32_decode((uint8_t *) txt, length, &ptmp);
   printf("done\n%8x\n%8x\n%8x\n%8x\n", *(ptmp-4),*(ptmp-3),*(ptmp-2),*(ptmp-1));
-  printf("nout %d\n", ptmp-out);
+  printf("nout %zu\n", ptmp-out);
   return l;
 }
 
@@ -58,11 +59,12 @@ void demo(size_t N) {
   
   int expected = 0; // it is all ascii?
   int repeat = 5;
-  printf("We are feeding ascii so it is always going to be ok.\n");
+  printf("ascii\n");
 
   BEST_TIME(decode(data, N, out), expected, populate(data, N), repeat, N,
             true);
 
+  printf("length 3 utf-8, with filler ascii at end\n");
   BEST_TIME(decode(data, N, out), expected, populate3(data, N), repeat, N,
             true);
 
