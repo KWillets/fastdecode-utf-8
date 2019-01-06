@@ -67,11 +67,12 @@ void demo(size_t N) {
   printf("length 3 utf-8, with filler ascii at end\n");
   BEST_TIME(decode(data, N, out), expected, populate3(data, N), repeat, N,
             true);
-
+  /*
 #ifdef __linux__
   BEST_TIME_LINUX(validate_utf8_fast(data, N), expected, populate(data, N),
                   repeat, N, true);
 #endif
+  */
   printf("\n\n");
 
   free(data);
