@@ -11,22 +11,38 @@
 		      0x1F,0x1F,\
 		      0x0F, 0x07)
 
-
-
 #define len   _mm_setr_epi8(0,0,0,0,0,0,0,0,-1,-1,-1,-1,1,1,2,3)
 #define iota1 _mm_setr_epi8(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)
 
 // shared routines
-__m128i compress( __m128i bitfields ) {
+static inline __m128i compress( __m128i bitfields ) {
   const __m128i pack16  = _mm_maddubs_epi16(bitfields, _mm_set1_epi32(0x40014001));
   return _mm_madd_epi16(pack16, _mm_set1_epi32(0x10000001));
 }
 
-__m128i make_upper4(__m128i  utf8) {return _mm_and_si128(_mm_srli_epi64(utf8, 4), _mm_set1_epi8(0x0F));}
+static inline __m128i make_upper4(__m128i  utf8) {return _mm_and_si128(_mm_srli_epi64(utf8, 4), _mm_set1_epi8(0x0F));}
 
-__m128i shift( __m128i x, int i ) {
-  char ix[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+static inline __m128i shift( __m128i x, int i ) {
+  static char ix[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
   return _mm_shuffle_epi8(x, _mm_loadu_si128((__m128i *)(ix + i)));
+}
+
+static inline void storeq( uint32_t *out, __m128i utf8, int i, uint8_t *bcode, uint8_t bytes)
+{
+  __m128i mout;
+  if( bytes == 4 ) {
+    mout = _mm_cvtepu8_epi32(shift(utf8, i));
+  } else {	
+    __m128i Shuf = *(__m128i *) &shuffleTable[bcode[i]][0];
+    __m128i bitfields = _mm_shuffle_epi8(shift(utf8, i), Shuf); // masked 
+    mout = compress(bitfields);
+  }
+  _mm_storeu_si128((__m128i *) out, mout);
+}
+
+static inline void asciiq( uint32_t *out, __m128i ascii, int i )
+{
+  _mm_storeu_si128((__m128i *) out, _mm_cvtepu8_epi32(shift(ascii, i)));  
 }
 
 static inline int utf32_code_ptr(void *p, uint32_t **pout) {
@@ -43,31 +59,41 @@ static inline int utf32_code_ptr(void *p, uint32_t **pout) {
 
   // iterate through jmp
   int i, multibyte = 0;
-  __m128i masked;
-  uint8_t bcode[16];
 
+  uint8_t offsets[4];
+  uint8_t nbytes[4];
+  int nquads=0;
+  
   for(i = 0; i < 16 && jmp[i] > i; i = jmp[i])
     {
       int bytes = jmp[i] - i;
-      __m128i mout;
-      if( bytes == 4 ) {
-	mout = _mm_cvtepu8_epi32(shift(utf8, i));
-      } else {
-	if( !multibyte ) {
-	  __m128i code12 = _mm_or_si128(lengths,_mm_slli_epi64(_mm_shuffle_epi8(lengths, P), 2));  
-	  __m128i code =   _mm_or_si128(code12,_mm_slli_epi64(_mm_shuffle_epi8(code12, P2), 4));
-	  _mm_storeu_si128( (__m128i *)bcode, code );
-	  masked = _mm_and_si128(_mm_shuffle_epi8(mask,upper4), utf8);
-	  multibyte = 1;
-	}
-	
-	__m128i Shuf = *(__m128i *) &shuffleTable[bcode[i]][0];
-	__m128i bitfields = _mm_shuffle_epi8(shift(masked, i), Shuf);
-	mout = compress(bitfields);
-      }
-      _mm_storeu_si128((__m128i *)*pout, mout);
-      *pout += 4;
+      multibyte = multibyte || bytes > 4;
+      offsets[nquads]=i;
+      nbytes[nquads]=bytes;
+      nquads++;
     }
+
+  if(multibyte) {
+    __m128i code12 = _mm_or_si128(lengths,_mm_slli_epi64(_mm_shuffle_epi8(lengths, P), 2));  
+    __m128i code =   _mm_or_si128(code12,_mm_slli_epi64(_mm_shuffle_epi8(code12, P2), 4));
+    uint8_t bcode[16];
+    _mm_storeu_si128( (__m128i *)bcode, code );
+    utf8 = _mm_and_si128(_mm_shuffle_epi8(mask,upper4), utf8); // mask off in place
+    switch(nquads) {
+    case 4: storeq((*pout)+12, utf8, offsets[3], bcode, nbytes[3]);
+    case 3: storeq((*pout)+8, utf8, offsets[2], bcode, nbytes[2]);
+    case 2: storeq((*pout)+4, utf8, offsets[1], bcode, nbytes[1]);
+    case 1: storeq(*pout, utf8, offsets[0], bcode, nbytes[0]);
+    }
+  } else {
+    switch(nquads) {
+    case 4: asciiq((*pout)+12, utf8, 12);
+    case 3: asciiq((*pout)+8, utf8, 8);
+    case 2: asciiq((*pout)+4, utf8, 4);
+    case 1: asciiq((*pout), utf8, 0);
+    }
+  }
+  *pout += nquads * 4;
   return i;
 }
 
