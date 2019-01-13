@@ -41,6 +41,22 @@ void populate3(char *data, size_t N) {
     data[i]='a';
 }
 
+void populate_r(char *data, size_t N) {
+  int i;
+  for(i=0; i+3 < N; ) {
+    if( rand() & 4096 ) {
+      memcpy(data+i, "ㄱ", 3);
+      i+= 3;
+    } else {
+      data[i]='a';
+      i+=1;
+    }
+  }
+  
+  for(; i < N; i++)
+    data[i]='z';
+}
+
 
 size_t decode(char *txt, int length, uint32_t *out)
 {
@@ -66,6 +82,9 @@ void demo(size_t N) {
 
   printf("length 3 utf-8, with filler ascii at end\n");
   BEST_TIME(decode(data, N, out), expected, populate3(data, N), repeat, N,
+            true);
+
+  BEST_TIME(decode(data, N, out), expected, populate_r(data, N), repeat, N,
             true);
   /*
 #ifdef __linux__
